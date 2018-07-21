@@ -43,8 +43,9 @@ int main(int argc, char **argv)
 	int opt;
 	struct tetra_rx_state *trs;
 	struct tetra_mac_state *tms;
-
-	tetra_gsmtap_init("localhost", 0);
+	char *pcap_file_path = NULL;
+	char no_udp_tap = 0;
+	char err = 0;
 
 	tms = talloc_zero(tetra_tall_ctx, struct tetra_mac_state);
 	tetra_mac_state_init(tms);
@@ -52,18 +53,28 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
-	while ((opt = getopt(argc, argv, "d:")) != -1) {
+	while ((opt = getopt(argc, argv, "a:t:d:n")) != -1) {
 		switch (opt) {
+		case 'a':
+			tms->arfcn = atoi(optarg);
+			break;
+		case 't':
+			pcap_file_path = strdup(optarg);
+			break;
 		case 'd':
 			tms->dumpdir = strdup(optarg);
 			break;
+		case 'n':
+			no_udp_tap = 1;
+			break;
 		default:
 			fprintf(stderr, "Unknown option %c\n", opt);
+			err = 1;
 		}
 	}
 
-	if (argc <= optind) {
-		fprintf(stderr, "Usage: %s [-d DUMPDIR] <file_with_1_byte_per_bit>\n", argv[0]);
+	if (argc <= optind || err) {
+		fprintf(stderr, "Usage: %s [-d DUMPDIR] [-a ARFCN] [-t PCAP_FILE] [-n] <file_with_1_byte_per_bit>\n", argv[0]);
 		exit(1);
 	}
 
@@ -71,6 +82,13 @@ int main(int argc, char **argv)
 	if (fd < 0) {
 		perror("open");
 		exit(2);
+	}
+
+	if (!no_udp_tap) {
+		tetra_gsmtap_init_network("localhost", 0);
+	}
+	if (pcap_file_path) {
+		tetra_gsmtap_init_file(pcap_file_path);
 	}
 
 	int to_consume = BUFSIZE;

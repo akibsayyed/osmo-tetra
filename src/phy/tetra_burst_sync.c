@@ -36,6 +36,7 @@ struct tetra_phy_state t_phy_state;
 
 void tetra_burst_rx_cb(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *tms);
 void tetra_burst_rx_ul(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *tms);
+void tetra_burst_rx_di(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *tms);
 
 static unsigned int make_bitbuf_space(struct tetra_rx_state *trs, unsigned int len)
 {
@@ -135,8 +136,29 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 			break;
 		}
 		return train_seq_offs+1;
+	} else if (trs->burst_cb_priv->channel_type == TETRA_TYPE_DIRECT) {
+		rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
+					(1 << TETRA_TRAIN_SYNC)|
+					(1 << TETRA_TRAIN_NORM_1), &train_seq_offs);
+
+		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
+			return -conserve_bits(trs, TETRA_BITS_PER_TS);
+		}
+
+		switch (rc) {
+		case TETRA_TRAIN_NORM_1:
+			if (train_seq_offs >= 230) {
+				tetra_burst_rx_di(trs->bitbuf+train_seq_offs-230, TETRA_BITS_PER_TS, rc, trs->burst_cb_priv);
+			}
+			break;
+		case TETRA_TRAIN_SYNC:
+			if (train_seq_offs >= 214) {
+				tetra_burst_rx_di(trs->bitbuf+train_seq_offs-214, TETRA_BITS_PER_TS, rc, trs->burst_cb_priv);
+			}
+			break;
+		}
+		return train_seq_offs+1;
 	}
 
-	/* We don't know what to do, so try to advance... */
-	return -TETRA_BITS_PER_TS;
+	assert(0);
 }

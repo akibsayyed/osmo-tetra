@@ -97,3 +97,15 @@ uint32_t tetra_scramb_get_init(uint16_t mcc, uint16_t mnc, uint8_t colour)
 
 	return scramb_init;
 }
+
+uint32_t tetra_scramb_get_init_direct(uint32_t mni, uint32_t ssi)
+{
+	uint32_t scramb_init;
+
+	mni &= 0x3f;
+
+	scramb_init = (mni << 24) | ssi;
+	scramb_init = (scramb_init << 2) | SCRAMB_INIT;
+
+	return scramb_init;
+}

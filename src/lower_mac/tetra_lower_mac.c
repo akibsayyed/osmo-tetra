@@ -218,7 +218,7 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 
 	/* De-scramble, pay special attention to SB1 pre-defined scrambling */
 	memcpy(type4, bits, tbp->type345_bits);
-	if (type == TPSAP_T_SB1) {
+	if (type == TPSAP_T_SB1 || (type == TPSAP_T_SB2 && tms->channel_type == TETRA_TYPE_DIRECT)) {
 		tetra_scramb_bits(SCRAMB_INIT, type4, tbp->type345_bits);
 		tup->scrambling_code = SCRAMB_INIT;
 	} else {
@@ -230,7 +230,7 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 		osmo_ubit_dump(type4, tbp->type345_bits));
 
 	/* If this is a traffic channel, dump. */
-	if ((type == TPSAP_T_SCH_F) && (tms->cur_burst.is_traffic) && tms->dumpdir) {
+	if ((type == TPSAP_T_SCH_F) && (tms->cur_burst.is_traffic || tms->channel_type == TETRA_TYPE_DIRECT) && tms->dumpdir) {
 		char fname[PATH_MAX];
 		int16_t block[690];
 		FILE *f;
@@ -307,26 +307,55 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 
 	switch (type) {
 	case TPSAP_T_SB1:
-		printf("TMB-SAP SYNC CC %s(0x%02x) ", osmo_ubit_dump(type2+4, 6), bits_to_uint(type2+4, 6));
-		printf("TN %s(%u) ", osmo_ubit_dump(type2+10, 2), bits_to_uint(type2+10, 2));
-		printf("FN %s(%2u) ", osmo_ubit_dump(type2+12, 5), bits_to_uint(type2+12, 5));
-		printf("MN %s(%2u) ", osmo_ubit_dump(type2+17, 6), bits_to_uint(type2+17, 6));
-		printf("MCC %s(%u) ", osmo_ubit_dump(type2+31, 10), bits_to_uint(type2+31, 10));
-		printf("MNC %s(%u)\n", osmo_ubit_dump(type2+41, 14), bits_to_uint(type2+41, 14));
-		/* obtain information from SYNC PDU */
-		tcd->colour_code = bits_to_uint(type2+4, 6);
-		tcd->time.tn = bits_to_uint(type2+10, 2);
-		tcd->time.fn = bits_to_uint(type2+12, 5);
-		tcd->time.mn = bits_to_uint(type2+17, 6);
-		tcd->mcc = bits_to_uint(type2+31, 10);
-		tcd->mnc = bits_to_uint(type2+41, 14);
-		/* compute the scrambling code for the current cell */
-		tcd->scramb_init = tetra_scramb_get_init(tcd->mcc, tcd->mnc, tcd->colour_code);
-		/* update the PHY layer time */
-		memcpy(&t_phy_state.time, &tcd->time, sizeof(t_phy_state.time));
-		tup->lchan = TETRA_LC_BSCH;
+		if (tms->channel_type == TETRA_TYPE_DOWNLINK) {
+			printf("TMB-SAP SYNC CC %s(0x%02x) ", osmo_ubit_dump(type2+4, 6), bits_to_uint(type2+4, 6));
+			printf("TN %s(%u) ", osmo_ubit_dump(type2+10, 2), bits_to_uint(type2+10, 2));
+			printf("FN %s(%2u) ", osmo_ubit_dump(type2+12, 5), bits_to_uint(type2+12, 5));
+			printf("MN %s(%2u) ", osmo_ubit_dump(type2+17, 6), bits_to_uint(type2+17, 6));
+			printf("MCC %s(%u) ", osmo_ubit_dump(type2+31, 10), bits_to_uint(type2+31, 10));
+			printf("MNC %s(%u)\n", osmo_ubit_dump(type2+41, 14), bits_to_uint(type2+41, 14));
+			/* obtain information from SYNC PDU */
+			tcd->colour_code = bits_to_uint(type2+4, 6);
+			tcd->time.tn = bits_to_uint(type2+10, 2);
+			tcd->time.fn = bits_to_uint(type2+12, 5);
+			tcd->time.mn = bits_to_uint(type2+17, 6);
+			tcd->mcc = bits_to_uint(type2+31, 10);
+			tcd->mnc = bits_to_uint(type2+41, 14);
+			/* compute the scrambling code for the current cell */
+			tcd->scramb_init = tetra_scramb_get_init(tcd->mcc, tcd->mnc, tcd->colour_code);
+			/* update the PHY layer time */
+			memcpy(&t_phy_state.time, &tcd->time, sizeof(t_phy_state.time));
+			tup->lchan = TETRA_LC_BSCH;
+		} else if (tms->channel_type == TETRA_TYPE_DIRECT) {
+			printf("FRAME SYNC ");
+			printf("SC %s ", osmo_ubit_dump(type2+0, 4));
+			printf("PDU %s ", osmo_ubit_dump(type2+4, 2));
+			printf("COMM %s ", osmo_ubit_dump(type2+6, 2));
+			printf("SLOT %s ", osmo_ubit_dump(type2+14, 2));
+			printf("FN %s(%u) ", osmo_ubit_dump(type2+16, 5), bits_to_uint(type2+16, 5));
+			printf("Air encrypt %s \n", osmo_ubit_dump(type2+21, 2));
+			tcd->colour_code = bits_to_uint(type2+4, 6);
+			tcd->time.tn = bits_to_uint(type2+10, 2);
+			tcd->time.fn = bits_to_uint(type2+12, 5);
+			tcd->time.mn = bits_to_uint(type2+17, 6);
+			tcd->mcc = bits_to_uint(type2+31, 10);
+			tcd->mnc = bits_to_uint(type2+41, 14);
+			memcpy(&t_phy_state.time, &tcd->time, sizeof(t_phy_state.time));
+			tup->lchan = TETRA_LC_BSCH;
+		}
 		break;
 	case TPSAP_T_SB2:
+		if (tms->channel_type == TETRA_TYPE_DIRECT) {
+			printf("FRAME FRAG %s ", osmo_ubit_dump(type2+7, 1));
+			printf("CNTDN %s(%u) ", osmo_ubit_dump(type2+12, 2), bits_to_uint(type2+12, 2));
+			printf("DSTADDR %s.", osmo_ubit_dump(type2+14, 2));
+			printf("%s(%u) ", osmo_ubit_dump(type2+16, 24), bits_to_uint(type2+16, 24));
+			printf("SSI %s.", osmo_ubit_dump(type2+40, 2));
+			printf("%s(%u) ", osmo_ubit_dump(type2+42, 24), bits_to_uint(type2+42, 24));
+			printf("MNI %s(%u)\n", osmo_ubit_dump(type2+66, 24), bits_to_uint(type2+66, 24));
+			tcd->scramb_init = tetra_scramb_get_init_direct(bits_to_uint(type2+66, 24), bits_to_uint(type2+42, 24));
+			break;
+		}
 	case TPSAP_T_NDB:
 		/* FIXME: do something */
 		break;
@@ -346,7 +375,7 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 	/* send Rx time along with the TMV-UNITDATA.ind primitive */
 	memcpy(&tup->tdma_time, &tcd->time, sizeof(tup->tdma_time));
 
-	upper_mac_prim_recv(&ttp->oph, tms);
+	if (tms->channel_type == TETRA_TYPE_DOWNLINK || tms->channel_type == TETRA_TYPE_UPLINK) {
+		upper_mac_prim_recv(&ttp->oph, tms);
+	}
 }
-
-

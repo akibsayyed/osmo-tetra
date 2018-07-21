@@ -56,7 +56,7 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
-	while ((opt = getopt(argc, argv, "a:t:d:nuc:m:s:")) != -1) {
+	while ((opt = getopt(argc, argv, "a:t:d:nuic:m:s:")) != -1) {
 		switch (opt) {
 		case 'a':
 			tms->arfcn = atoi(optarg);
@@ -72,6 +72,9 @@ int main(int argc, char **argv)
 			break;
 		case 'u':
 			tms->channel_type = TETRA_TYPE_UPLINK;
+			break;
+		case 'i':
+			tms->channel_type = TETRA_TYPE_DIRECT;
 			break;
 		case 'c':
 			tms->tcp.mcc = atoi(optarg);
@@ -99,7 +102,16 @@ int main(int argc, char **argv)
 	}
 
 	if (argc <= optind || err) {
-		fprintf(stderr, "Usage: %s [-d DUMPDIR] [-a ARFCN] [-t PCAP_FILE] [-n] <file_with_1_byte_per_bit>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [params] <file_with_1_byte_per_bit>\n", argv[0]);
+		fprintf(stderr, " -a arfcn     .. set ARFCN used in GSMTAP\n");
+		fprintf(stderr, " -t filename  .. output PCAP to file\n");
+		fprintf(stderr, " -d directory .. dump traffic channel to directory\n");
+		fprintf(stderr, " -n           .. disable GSMTAP over UDP\n");
+		fprintf(stderr, " -u           .. this is uplink (default: downlink)\n");
+		fprintf(stderr, " -i           .. this is direct (default: downlink)\n");
+		fprintf(stderr, " -c mcc       .. set MCC for uplink scrambling (mandatory)\n");
+		fprintf(stderr, " -m mnc       .. set MNC for uplink scrambling (mandatory)\n");
+		fprintf(stderr, " -s cc        .. set CC for uplink scrambling (will be automatically bruteforced if not provided)\n");
 		exit(1);
 	}
 

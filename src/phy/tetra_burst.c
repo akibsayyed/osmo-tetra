@@ -368,6 +368,9 @@ void tetra_burst_rx_cb(const uint8_t *burst, unsigned int len, enum tetra_train_
 		tp_sap_udata_ind(TPSAP_T_BBK, bbk_buf, NDB_BBK_BITS, priv);
 		tp_sap_udata_ind(TPSAP_T_SCH_F, ndbf_buf, 2*NDB_BLK_BITS, priv);
 		break;
+	default:
+		fprintf(stderr, "Unsupported burst type\n");
+		break;
 	}
 }
 
@@ -394,6 +397,29 @@ void tetra_burst_rx_ul(const uint8_t *burst, unsigned int len, enum tetra_train_
 		memcpy(nubf_buf+CUB_BLK_BITS, burst+CUB_BLK2_OFFSET, CUB_BLK_BITS);
 		/* send one part of the burst via TP-SAP into lower MAC */
 		tp_sap_udata_ind(TPSAP_T_SCH_HU, nubf_buf, 2*CUB_BLK_BITS, priv);
+		break;
+	default:
+		fprintf(stderr, "Unsupported burst type\n");
+		break;
+	}
+}
+
+void tetra_burst_rx_di(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *priv)
+{
+	uint8_t bbk_buf[2*216];
+
+	switch (type) {
+	case TETRA_TRAIN_NORM_1:
+		memcpy(bbk_buf, burst+12+2, 216);
+		memcpy(bbk_buf+216, burst+12+2+216+22, 216);
+		tp_sap_udata_ind(TPSAP_T_SCH_F, bbk_buf, 216*2, priv);
+		break;
+	case TETRA_TRAIN_SYNC:
+		tp_sap_udata_ind(TPSAP_T_SB1, burst+12+2+80, 120, priv);
+		tp_sap_udata_ind(TPSAP_T_SB2, burst+12+2+80+120+38, 216, priv);
+		break;
+	default:
+		fprintf(stderr, "Unsupported burst type\n");
 		break;
 	}
 }

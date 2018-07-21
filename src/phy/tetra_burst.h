@@ -2,6 +2,7 @@
 #define TETRA_BURST_H
 
 #include <stdint.h>
+#include "tetra_common.h"
 
 enum tp_sap_data_type {
 	TPSAP_T_SB1,

@@ -89,7 +89,7 @@ const char *tetra_alloc_dump(const struct tetra_chan_alloc_decoded *cad, struct 
 		freq_offset = tms->last_sid.freq_offset;
 	}
 
-	cur += sprintf(cur, "%s (TN%u/%s/%uHz)",
+	cur += snprintf(cur, sizeof(buf)-(cur-buf), "%s (TN%u/%s/%uHz)",
 		tetra_get_alloc_t_name(cad->type), cad->timeslot,
 		tetra_get_ul_dl_name(cad->ul_dl),
 		tetra_dl_carrier_hz(freq_band, cad->carrier_nr, freq_offset));
@@ -149,6 +149,29 @@ static int rx_tm_sdu(struct tetra_mac_state *tms, struct msgb *msg, unsigned int
 	}
 	return len;
 }
+
+#if 0
+static void rx_data_uplink(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
+{
+        struct msgb *msg = tmvp->oph.msg;
+        struct tetra_data_decoded tdd;
+        int tmpdu_offset;
+
+        memset(&tdd, 0, sizeof(tdd));
+        tmpdu_offset = macpdu_decode_data_uplink(&tdd, msg->l1h);
+        msg->l2h = msg->l1h + tmpdu_offset;
+        printf("DATA Encr=%u, Length=%d, Addr=%s ",
+                tdd.encryption_mode, tdd.macpdu_length,
+                tetra_addr_dump(&tdd.addr));
+
+        if (tdd.macpdu_length > 0 && tdd.encryption_mode == 0) {
+                int len_bits = tdd.macpdu_length*8;
+                if (msg->l2h + len_bits > msg->l1h + msgb_l1len(msg))
+                        len_bits = msgb_l1len(msg) - tmpdu_offset;
+                rx_tm_sdu(tms, msg, len_bits);
+        }
+}
+#endif
 
 static void rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 {

@@ -2,6 +2,7 @@
 #define TETRA_COMMON_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "tetra_mac_pdu.h"
 #include <osmocom/core/linuxlist.h>
 
@@ -46,6 +47,9 @@ struct tetra_phy_state {
 };
 extern struct tetra_phy_state t_phy_state;
 
+#define	TETRA_TYPE_DOWNLINK	0
+#define	TETRA_TYPE_UPLINK	1
+#define	TETRA_TYPE_DIRECT	2
 struct tetra_mac_state {
 	struct llist_head voice_channels;
 	struct {
@@ -57,6 +61,14 @@ struct tetra_mac_state {
 	int ssi;	/* SSI */
 	int tsn;	/* Timeslon number */
 	int arfcn;
+	int channel_type;
+	struct tetra_channel_param {
+		uint16_t mcc;
+		uint16_t mnc;
+		uint8_t colour_code;
+		bool cc_set;
+		bool mcnc_set;
+	} tcp;
 };
 
 void tetra_mac_state_init(struct tetra_mac_state *tms);

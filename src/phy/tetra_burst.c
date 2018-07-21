@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include <phy/tetra_burst.h>
 
@@ -46,6 +47,16 @@
 #define NDB_BLK_BITS	(108*DQPSK4_BITS_PER_SYM)
 #define NDB_BBK_BITS	SB_BBK_BITS
 
+#define NUB_BLK1_OFFSET ((17+2)*DQPSK4_BITS_PER_SYM)
+#define NUB_BLK2_OFFSET ((17+2+108+11)*DQPSK4_BITS_PER_SYM)
+
+#define NUB_BLK_BITS    (108*DQPSK4_BITS_PER_SYM)
+
+#define CUB_BLK1_OFFSET ((17+2)*DQPSK4_BITS_PER_SYM)
+#define CUB_BLK2_OFFSET ((17+2+42+15)*DQPSK4_BITS_PER_SYM)
+
+#define CUB_BLK_BITS    (42*DQPSK4_BITS_PER_SYM)
+
 
 /* 9.4.4.3.1 Frequency Correction Field */
 static const uint8_t f_bits[80] = {
@@ -54,24 +65,6 @@ static const uint8_t f_bits[80] = {
 	/* f73..f80 = 1*/
 	[72] = 1, [73] = 1, [74] = 1, [75] = 1,
 	[76] = 1, [77] = 1, [78] = 1, [79] = 1 };
-
-/* 9.4.4.3.2 Normal Training Sequence */
-static const uint8_t n_bits[22] = { 1,1, 0,1, 0,0, 0,0, 1,1, 1,0, 1,0, 0,1, 1,1, 0,1, 0,0 };
-static const uint8_t p_bits[22] = { 0,1, 1,1, 1,0, 1,0, 0,1, 0,0, 0,0, 1,1, 0,1, 1,1, 1,0 };
-static const uint8_t q_bits[22] = { 1,0, 1,1, 0,1, 1,1, 0,0, 0,0, 0,1, 1,0, 1,0, 1,1, 0,1 };
-static const uint8_t N_bits[33] = { 1,1,1, 0,0,1, 1,0,1, 1,1,1, 0,0,0, 1,1,1, 1,0,0, 0,1,1, 1,1,0, 0,0,0, 0,0,0 };
-static const uint8_t P_bits[33] = { 1,0,1, 0,1,1, 1,1,1, 1,0,1, 0,1,0, 1,0,1, 1,1,0, 0,0,1, 1,0,0, 0,1,0, 0,1,0 };
-
-/* 9.4.4.3.3 Extended training sequence */
-static const uint8_t x_bits[30] = { 1,0, 0,1, 1,1, 0,1, 0,0, 0,0, 1,1, 1,0, 1,0, 0,1, 1,1, 0,1, 0,0, 0,0, 1,1 };
-static const uint8_t X_bits[45] = { 0,1,1,1,0,0,1,1,0,1,0,0,0,0,1,0,0,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,0,0,0,0,1,1,1,0 };
-
-/* 9.4.4.3.4 Synchronization training sequence */
-static const uint8_t y_bits[38] = { 1,1, 0,0, 0,0, 0,1, 1,0, 0,1, 1,1, 0,0, 1,1, 1,0, 1,0, 0,1, 1,1, 0,0, 0,0, 0,1, 1,0, 0,1, 1,1 };
-
-/* 9.4.4.3.5 Tail bits */
-static const uint8_t t_bits[4] = { 1, 1, 0, 0 };
-static const uint8_t T_bits[6] = { 1, 1, 1, 0, 0, 0 };
 
 /* 9.4.4.3.6 Phase adjustment bits */
 enum phase_adj_bits { HA, HB, HC, HD, HE, HF, HG, HH, HI, HJ };
@@ -296,7 +289,7 @@ int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
 
 		filter = ((filter << 1) | cur[FILTER_LOOKAHEAD_LEN-1]) & FILTER_LOOKAHEAD_MASK;
 
-		int match = 0;
+		bool match = 0;
 		for(int i = 0; i < 5; i++) {
 			if(filter == tsq_bytes[i]) {
 				match = 1;
@@ -342,7 +335,7 @@ int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
 	return -1;
 }
 
-void tetra_burst_rx_cb(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, void *priv)
+void tetra_burst_rx_cb(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *priv)
 {
 	uint8_t bbk_buf[NDB_BBK_BITS];
 	uint8_t ndbf_buf[2*NDB_BLK_BITS];
@@ -374,6 +367,33 @@ void tetra_burst_rx_cb(const uint8_t *burst, unsigned int len, enum tetra_train_
 		/* send two parts of the burst via TP-SAP into lower MAC */
 		tp_sap_udata_ind(TPSAP_T_BBK, bbk_buf, NDB_BBK_BITS, priv);
 		tp_sap_udata_ind(TPSAP_T_SCH_F, ndbf_buf, 2*NDB_BLK_BITS, priv);
+		break;
+	}
+}
+
+void tetra_burst_rx_ul(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, struct tetra_mac_state *priv)
+{
+	uint8_t nubf_buf[2*NUB_BLK_BITS];
+
+	switch(type) {
+	case TETRA_TRAIN_NORM_2:
+		/* send two parts of the burst via TP-SAP into lower MAC */
+		tp_sap_udata_ind(TPSAP_T_NDB, burst+NUB_BLK1_OFFSET, NUB_BLK_BITS, priv);
+		tp_sap_udata_ind(TPSAP_T_NDB, burst+NUB_BLK2_OFFSET, NUB_BLK_BITS, priv);
+		break;
+	case TETRA_TRAIN_NORM_1:
+		/* re-combine the two parts */
+		memcpy(nubf_buf, burst+NUB_BLK1_OFFSET, NUB_BLK_BITS);
+		memcpy(nubf_buf+NUB_BLK_BITS, burst+NUB_BLK2_OFFSET, NUB_BLK_BITS);
+		/* send one part of the burst via TP-SAP into lower MAC */
+		tp_sap_udata_ind(TPSAP_T_SCH_F, nubf_buf, 2*NUB_BLK_BITS, priv);
+		break;
+	case TETRA_TRAIN_EXT:
+		/* re-combine the two parts */
+		memcpy(nubf_buf, burst+CUB_BLK1_OFFSET, CUB_BLK_BITS);
+		memcpy(nubf_buf+CUB_BLK_BITS, burst+CUB_BLK2_OFFSET, CUB_BLK_BITS);
+		/* send one part of the burst via TP-SAP into lower MAC */
+		tp_sap_udata_ind(TPSAP_T_SCH_HU, nubf_buf, 2*CUB_BLK_BITS, priv);
 		break;
 	}
 }

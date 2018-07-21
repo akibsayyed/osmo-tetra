@@ -54,6 +54,7 @@ struct msgb *tetra_gsmtap_makemsg(struct tetra_tdma_time *tm, enum tetra_log_cha
 	tms->tsn = ts;
 	gh->sub_slot = ss;
 	gh->snr_db = snr;
+	gh->arfcn = htons(tms->arfcn);
 	gh->signal_dbm = signal_dbm;
 	gh->frame_number = htonl(fn);
 	gh->sub_type = lchan2gsmtap[lchan];

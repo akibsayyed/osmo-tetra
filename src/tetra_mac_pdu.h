@@ -212,6 +212,15 @@ struct tetra_addr {
 	uint8_t usage_marker;
 };
 
+struct tetra_data_decoded {
+        uint8_t encryption_mode;
+        struct tetra_addr addr;
+        uint8_t frag_pres;
+        int macpdu_length;
+        uint8_t frag_flag;
+};
+int macpdu_decode_data_uplink(struct tetra_data_decoded *tdd, const uint8_t *bits);
+
 struct tetra_resrc_decoded {
 	uint8_t encryption_mode;
 	uint8_t rand_acc_flag;

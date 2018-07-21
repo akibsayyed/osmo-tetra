@@ -182,6 +182,41 @@ static int decode_length(unsigned int length_ind)
 		return -EINVAL;
 }
 
+/* Section 21.4.2.3 MAC-DATA */
+
+int macpdu_decode_data_uplink(struct tetra_data_decoded *tdd, const uint8_t *bits)
+{
+	const uint8_t *cur = bits + 2;
+
+	tdd->encryption_mode = *cur++; // wth
+	tdd->addr.type = bits_to_uint(cur, 2) + 1; cur += 2;
+	switch(tdd->addr.type) {
+	case ADDR_TYPE_SSI:
+	case ADDR_TYPE_USSI:
+	case ADDR_TYPE_SMI:
+		tdd->addr.ssi = bits_to_uint(cur, 24);
+		break;
+	case ADDR_TYPE_EVENT_LABEL:
+		tdd->addr.event_label = bits_to_uint(cur, 10);
+		break;
+	default:
+		return -EINVAL;
+		break;
+	}
+	cur += addr_len_by_type[tdd->addr.type];
+	printf("Addr type: %hho, SSI: %o, len: %hho\n", tdd->addr.type, tdd->addr.ssi, addr_len_by_type[tdd->addr.type]);
+	tdd->frag_pres = *cur++;
+	if (tdd->frag_pres) {
+		tdd->frag_flag = *cur++;
+		cur += 5;
+	} else {
+		tdd->macpdu_length = decode_length(bits_to_uint(cur, 6)); cur += 6;
+		printf("MAC PDU len: %d\n", tdd->macpdu_length);
+	}
+
+	return cur - bits;
+}
+
 /* Section 21.4.3.1 MAC-RESOURCE */
 int macpdu_decode_resource(struct tetra_resrc_decoded *rsd, const uint8_t *bits)
 {

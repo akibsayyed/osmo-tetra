@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -44,8 +45,10 @@ int main(int argc, char **argv)
 	struct tetra_rx_state *trs;
 	struct tetra_mac_state *tms;
 	char *pcap_file_path = NULL;
-	char no_udp_tap = 0;
-	char err = 0;
+	bool no_udp_tap = false;
+	bool err = false;
+	bool mcc_set = false;
+	bool mnc_set = false;
 
 	tms = talloc_zero(tetra_tall_ctx, struct tetra_mac_state);
 	tetra_mac_state_init(tms);
@@ -53,7 +56,7 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
-	while ((opt = getopt(argc, argv, "a:t:d:n")) != -1) {
+	while ((opt = getopt(argc, argv, "a:t:d:nuc:m:s:")) != -1) {
 		switch (opt) {
 		case 'a':
 			tms->arfcn = atoi(optarg);
@@ -65,17 +68,43 @@ int main(int argc, char **argv)
 			tms->dumpdir = strdup(optarg);
 			break;
 		case 'n':
-			no_udp_tap = 1;
+			no_udp_tap = true;
+			break;
+		case 'u':
+			tms->channel_type = TETRA_TYPE_UPLINK;
+			break;
+		case 'c':
+			tms->tcp.mcc = atoi(optarg);
+			tms->tcp.mcnc_set = true;
+			mcc_set = true;
+			break;
+		case 'm':
+			tms->tcp.mnc = atoi(optarg);
+			tms->tcp.mcnc_set = true;
+			mnc_set = true;
+			break;
+		case 's':
+			tms->tcp.colour_code = atoi(optarg);
+			tms->tcp.cc_set = true;
 			break;
 		default:
 			fprintf(stderr, "Unknown option %c\n", opt);
-			err = 1;
+			err = true;
 		}
+	}
+
+	if (mcc_set != mnc_set) {
+		fprintf(stderr, "You must set either both -m and -c or none of them!\n");
+		err = true;
 	}
 
 	if (argc <= optind || err) {
 		fprintf(stderr, "Usage: %s [-d DUMPDIR] [-a ARFCN] [-t PCAP_FILE] [-n] <file_with_1_byte_per_bit>\n", argv[0]);
 		exit(1);
+	}
+
+	if (tms->channel_type == TETRA_TYPE_UPLINK && !mcc_set ) {
+		fprintf(stderr, "You have specified uplink, but not MCC and MNC. This is probably not what you want!\n");
 	}
 
 	fd = open(argv[optind], O_RDONLY);
@@ -102,6 +131,10 @@ int main(int argc, char **argv)
 			perror("read");
 			exit(1);
 		}
+		/*if (len == 0) {
+			memset(buf, 0, BUFSIZE);
+			len = to_consume;
+		}*/
 		int rc = tetra_burst_sync_in(trs, buf, len);
 		if (len == 0 && rc <= 0) {
 			printf("EOF");

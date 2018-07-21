@@ -5,12 +5,14 @@
 
 struct tetra_tdma_time {
 	uint16_t hn;    /* hyperframe number (1 ... 65535) */
+        uint32_t bn;    /* bit parity (0 .. 1) */
 	uint32_t sn;	/* symbol number (1 ... 255) */
 	uint32_t tn;	/* timeslot number (1 .. 4) */
 	uint32_t fn;	/* frame number (1 .. 18) */
 	uint32_t mn;	/* multiframe number (1 .. 60) */
 };
 
+void tetra_tdma_time_add_bit(struct tetra_tdma_time *tm, uint32_t bit_count);
 void tetra_tdma_time_add_sym(struct tetra_tdma_time *tm, uint32_t sym_count);
 void tetra_tdma_time_add_tn(struct tetra_tdma_time *tm, uint32_t tn_count);
 void tetra_tdma_time_add_fn(struct tetra_tdma_time *tm, uint32_t fn_count);

@@ -23,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <linux/limits.h>
+#include <assert.h>
 
 #include <osmocom/core/utils.h>
 #include <osmocom/core/msgb.h>
@@ -137,8 +138,28 @@ struct tetra_tmvsap_prim *tmvsap_prim_alloc(uint16_t prim, uint8_t op)
 	return ttp;
 }
 
+static uint16_t uplink_descramble_and_get_crc(const int colour_code, const uint8_t *bits, const struct tetra_blk_param *tbp)
+{
+	uint8_t type4[512] = {0};
+	uint8_t type3dp[512*4] = {0};
+	uint8_t type3[512] = {0};
+	uint8_t type2[512] = {0};
+
+	tcd->scramb_init = tetra_scramb_get_init(tcd->mcc, tcd->mnc, colour_code);
+	memcpy(type4, bits, tbp->type345_bits);
+	tetra_scramb_bits(tcd->scramb_init, type4, tbp->type345_bits);
+	block_deinterleave(tbp->type345_bits, tbp->interleave_a, type4, type3);
+	memset(type3dp, 0xff, sizeof(type3dp));
+	tetra_rcpc_depunct(TETRA_RCPC_PUNCT_2_3, type3, tbp->type345_bits, type3dp);
+	viterbi_dec_sb1_wrapper(type3dp, type2, tbp->type2_bits);
+
+	uint16_t crc = crc16_ccitt_bits(type2, tbp->type1_bits+16);
+
+	return crc;
+}
+
 /* incoming TP-SAP UNITDATA.ind  from PHY into lower MAC */
-void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned int len, void *priv)
+void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned int len, struct tetra_mac_state *tms)
 {
 	/* various intermediary buffers */
 	uint8_t type4[512];
@@ -147,7 +168,6 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 	uint8_t type2[512];
 
 	const struct tetra_blk_param *tbp = &tetra_blk_param[type];
-	struct tetra_mac_state *tms = priv;
 	const char *time_str;
 
 	/* TMV-SAP.UNITDATA.ind primitive which we will send to the upper MAC */
@@ -171,6 +191,30 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 
 	DEBUGP("%s %s type5: %s\n", tbp->name, tetra_tdma_time_dump(&tcd->time),
 		osmo_ubit_dump(bits, tbp->type345_bits));
+
+	if(tms->channel_type == TETRA_TYPE_UPLINK && tms->tcp.mcnc_set) {
+		tcd->mcc = tms->tcp.mcc;
+		tcd->mnc = tms->tcp.mnc;
+		if(tms->tcp.cc_set || type == TPSAP_T_SB1) {
+			tcd->colour_code = tms->tcp.colour_code;
+			tcd->scramb_init = tetra_scramb_get_init(tcd->mcc, tcd->mnc, tcd->colour_code);
+		} else if (tbp->interleave_a && tbp->have_crc16) {
+			assert(type != TPSAP_T_SB1);
+
+			uint16_t crc = uplink_descramble_and_get_crc(tcd->colour_code, bits, tbp);
+			if (crc != TETRA_CRC_OK) { // failed -> bruteforce
+				for(int i = 0; i<64; i++) {
+					crc = uplink_descramble_and_get_crc(i, bits, tbp);
+					if (crc == TETRA_CRC_OK) {
+						DEBUGP("bruteforced uplink colour %i: OK\n", i);
+						tcd->colour_code = i;
+						tcd->scramb_init = tetra_scramb_get_init(tcd->mcc, tcd->mnc, tcd->colour_code);
+						break;
+					}
+				}
+			}
+		}
+	}
 
 	/* De-scramble, pay special attention to SB1 pre-defined scrambling */
 	memcpy(type4, bits, tbp->type345_bits);
@@ -291,6 +335,9 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned 
 		break;
 	case TPSAP_T_SCH_F:
 		tup->lchan = TETRA_LC_SCH_F;
+		break;
+	case TPSAP_T_SCH_HU:
+		tup->lchan = TETRA_LC_SCH_HU;
 		break;
 	default:
 		/* FIXME: do something */

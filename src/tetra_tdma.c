@@ -65,6 +65,23 @@ static void normalize_sn(struct tetra_tdma_time *tm)
 	}
 	normalize_tn(tm);
 }
+static void normalize_bn(struct tetra_tdma_time *tm)
+{
+        uint32_t sn_delta;
+
+        if (tm->bn > 1) {
+                sn_delta = (tm->bn/2);
+                tm->bn = (tm->bn % 2);
+                tm->sn += sn_delta;
+        }
+        normalize_sn(tm);
+}
+
+void tetra_tdma_time_add_bit(struct tetra_tdma_time *tm, uint32_t bit_count)
+{
+        tm->bn += bit_count;
+        normalize_bn(tm);
+}
 
 void tetra_tdma_time_add_sym(struct tetra_tdma_time *tm, uint32_t sym_count)
 {

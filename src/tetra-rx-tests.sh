@@ -44,7 +44,7 @@ shift $(( $OPTIND - 1 ))
 tmpdir=`mktemp -d /tmp/tetraXXX`
 
 for f in $@; do
-	corrects=`"time" -o "$tmpdir/time" ./tetra-rx "$f" 2>/dev/null | grep -E "^CRC COMP: 0x.+ OK" | wc -l`
+	corrects=`"time" -o "$tmpdir/time" ./tetra-rx -d /tmp/tetra-dumpdir "$f" 2>/dev/null | grep -E "^CRC COMP: 0x.+ OK" | wc -l`
 	tt=`grep user "$tmpdir/time" | head -n 1 | cut -d u -f 1`
 	echo "$f: $corrects frames, $tt s"
 	hash=`sha256sum "$f" | cut -c 1-20`

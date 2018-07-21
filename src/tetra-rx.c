@@ -33,25 +33,16 @@
 #include <phy/tetra_burst.h>
 #include <phy/tetra_burst_sync.h>
 #include "tetra_gsmtap.h"
+#include "phy/tetra_burst_sync.h"
 
 void *tetra_tall_ctx;
 
 int main(int argc, char **argv)
 {
 	int fd;
+	int opt;
 	struct tetra_rx_state *trs;
 	struct tetra_mac_state *tms;
-
-	if (argc < 2) {
-		fprintf(stderr, "Usage: %s <file_with_1_byte_per_bit>\n", argv[0]);
-		exit(1);
-	}
-
-	fd = open(argv[1], O_RDONLY);
-	if (fd < 0) {
-		perror("open");
-		exit(2);
-	}
 
 	tetra_gsmtap_init("localhost", 0);
 
@@ -61,7 +52,27 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
-#define	BUFSIZE 4096
+	while ((opt = getopt(argc, argv, "d:")) != -1) {
+		switch (opt) {
+		case 'd':
+			tms->dumpdir = strdup(optarg);
+			break;
+		default:
+			fprintf(stderr, "Unknown option %c\n", opt);
+		}
+	}
+
+	if (argc <= optind) {
+		fprintf(stderr, "Usage: %s [-d DUMPDIR] <file_with_1_byte_per_bit>\n", argv[0]);
+		exit(1);
+	}
+
+	fd = open(argv[optind], O_RDONLY);
+	if (fd < 0) {
+		perror("open");
+		exit(2);
+	}
+
 	int to_consume = BUFSIZE;
 	uint8_t buf[BUFSIZE];
 
@@ -81,6 +92,7 @@ int main(int argc, char **argv)
 		to_consume = MIN(abs(rc), BUFSIZE);
 	}
 
+	free(tms->dumpdir);
 	talloc_free(trs);
 	talloc_free(tms);
 

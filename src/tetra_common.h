@@ -11,6 +11,10 @@
 #define DEBUGP(x, args...)	do { } while(0)
 #endif
 
+#define	MIN(a,b)		(((a)<(b))?(a):(b))
+#define	MAX(a,b)		(((a)>(b))?(a):(b))
+#define	CLAMP(x, lower, upper)	(MIN(upper, MAX(x, lower)))
+
 #define TETRA_SYM_PER_TS	255
 #define TETRA_BITS_PER_TS	(TETRA_SYM_PER_TS*2)
 

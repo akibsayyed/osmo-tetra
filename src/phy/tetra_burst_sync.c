@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #include <osmocom/core/utils.h>
 
@@ -50,7 +51,9 @@ static void make_bitbuf_space(struct tetra_rx_state *trs, unsigned int len)
 	}
 }
 
-/* input a raw bitstream into the tetra burst synchronizaer */
+/* input a raw bitstream into the tetra burst synchronizer
+ * returns the number of bits we can safely consume the next time
+ */
 int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int len)
 {
 	int rc;
@@ -65,17 +68,20 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 
 	switch (trs->state) {
 	case RX_S_UNLOCKED:
+		assert(sizeof(trs->bitbuf) > TETRA_BITS_PER_TS*2);
 		if (trs->bits_in_buf < TETRA_BITS_PER_TS*2) {
 			/* wait for more bits to arrive */
 			DEBUGP("-> waiting for more bits to arrive\n");
-			return len;
+			return -(sizeof(trs->bitbuf) - trs->bits_in_buf);
 		}
 		DEBUGP("-> trying to find training sequence between bit %u and %u\n",
 			trs->bitbuf_start_bitnum, trs->bits_in_buf);
 		rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
 					  (1 << TETRA_TRAIN_SYNC), &train_seq_offs);
-		if (rc < 0)
-			return rc;
+		if (rc < 0) {
+			/* no training sequence found, we can throw away everything except one timeslot */
+			return -(sizeof(trs->bitbuf) - TETRA_BITS_PER_TS);
+		}
 		printf("found SYNC training sequence in bit #%u\n", train_seq_offs);
 		trs->state = RX_S_KNOW_FSTART;
 		trs->next_frame_start_bitnum = trs->bitbuf_start_bitnum + train_seq_offs + 296;
@@ -87,17 +93,20 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 			trs->bits_in_buf = 0;
 		}
 #endif
-		break;
 	case RX_S_KNOW_FSTART:
 		/* we are locked, i.e. already know when the next frame should start */
-		if (trs->bitbuf_start_bitnum + trs->bits_in_buf < trs->next_frame_start_bitnum)
-			return 0;
-		else {
+		assert(trs->next_frame_start_bitnum >= trs->bitbuf_start_bitnum);
+		if (trs->bitbuf_start_bitnum + trs->bits_in_buf < trs->next_frame_start_bitnum) {
+			/* The end of the frame extends past the end of bitbuf. We can throw away everything till the frame start. */
+			return -(trs->next_frame_start_bitnum - trs->bitbuf_start_bitnum);
+		} else {
 			/* shift start of frame to start of bitbuf */
 			int offset = trs->next_frame_start_bitnum - trs->bitbuf_start_bitnum;
 			int bits_remaining = trs->bits_in_buf - offset;
 
-			memmove(trs->bitbuf, trs->bitbuf+offset, bits_remaining);
+			if (offset > 0) {
+				memmove(trs->bitbuf, trs->bitbuf+offset, bits_remaining);
+			}
 			trs->bits_in_buf = bits_remaining;
 			trs->bitbuf_start_bitnum += offset;
 
@@ -107,11 +116,11 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 	case RX_S_LOCKED:
 		if (trs->bits_in_buf < TETRA_BITS_PER_TS) {
 			/* not sufficient data for the full frame yet */
-			return len;
+			return -(sizeof(trs->bitbuf) - trs->bits_in_buf);
 		} else {
 			/* we have successfully received (at least) one frame */
 			tetra_tdma_time_add_tn(&t_phy_state.time, 1);
-			printf("\nBURST");
+			printf("\nBURST @ %u", trs->bitbuf_start_bitnum);
 			DEBUGP(": %s", osmo_ubit_dump(trs->bitbuf, TETRA_BITS_PER_TS));
 			printf("\n");
 			rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
@@ -146,9 +155,11 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 			memmove(trs->bitbuf, trs->bitbuf+TETRA_BITS_PER_TS, trs->bits_in_buf);
 			trs->bitbuf_start_bitnum += TETRA_BITS_PER_TS;
 			trs->next_frame_start_bitnum += TETRA_BITS_PER_TS;
+			return sizeof(trs->bitbuf) - trs->bits_in_buf;
 		}
 		break;
 
 	}
-	return len;
+	/* We don't know what to do, so try to advance... */
+	return -TETRA_BITS_PER_TS;
 }

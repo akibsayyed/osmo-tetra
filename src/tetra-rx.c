@@ -61,19 +61,24 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
+#define	BUFSIZE 4096
+	int to_consume = BUFSIZE;
+	uint8_t buf[BUFSIZE];
+
 	while (1) {
-		uint8_t buf[64];
 		int len;
 
-		len = read(fd, buf, sizeof(buf));
+		len = read(fd, buf, to_consume);
 		if (len < 0) {
 			perror("read");
 			exit(1);
-		} else if (len == 0) {
+		}
+		int rc = tetra_burst_sync_in(trs, buf, len);
+		if (len == 0 && rc <= 0) {
 			printf("EOF");
 			break;
 		}
-		tetra_burst_sync_in(trs, buf, len);
+		to_consume = MIN(abs(rc), BUFSIZE);
 	}
 
 	talloc_free(trs);

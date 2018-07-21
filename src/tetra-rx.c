@@ -124,18 +124,19 @@ int main(int argc, char **argv)
 	uint8_t buf[BUFSIZE];
 
 	while (1) {
-		int len;
+		int len, rlen;
 
 		len = read(fd, buf, to_consume);
 		if (len < 0) {
 			perror("read");
 			exit(1);
 		}
-		/*if (len == 0) {
+		rlen = len;
+		if (len == 0) {
 			memset(buf, 0, BUFSIZE);
-			len = to_consume;
-		}*/
-		int rc = tetra_burst_sync_in(trs, buf, len);
+			rlen = to_consume;
+		}
+		int rc = tetra_burst_sync_in(trs, buf, rlen);
 		if (len == 0 && rc <= 0) {
 			printf("EOF");
 			break;

@@ -49,6 +49,7 @@ int main(int argc, char **argv)
 	bool err = false;
 	bool mcc_set = false;
 	bool mnc_set = false;
+	int hdist = 0;
 
 	tms = talloc_zero(tetra_tall_ctx, struct tetra_mac_state);
 	tetra_mac_state_init(tms);
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
 	trs = talloc_zero(tetra_tall_ctx, struct tetra_rx_state);
 	trs->burst_cb_priv = tms;
 
-	while ((opt = getopt(argc, argv, "a:t:d:nuic:m:s:")) != -1) {
+	while ((opt = getopt(argc, argv, "a:t:d:nuic:m:s:h:")) != -1) {
 		switch (opt) {
 		case 'a':
 			tms->arfcn = atoi(optarg);
@@ -90,6 +91,9 @@ int main(int argc, char **argv)
 			tms->tcp.colour_code = atoi(optarg);
 			tms->tcp.cc_set = true;
 			break;
+		case 'h':
+			hdist = atoi(optarg);
+			break;
 		default:
 			fprintf(stderr, "Unknown option %c\n", opt);
 			err = true;
@@ -112,6 +116,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, " -c mcc       .. set MCC for uplink scrambling (mandatory)\n");
 		fprintf(stderr, " -m mnc       .. set MNC for uplink scrambling (mandatory)\n");
 		fprintf(stderr, " -s cc        .. set CC for uplink scrambling (will be automatically bruteforced if not provided)\n");
+		fprintf(stderr, " -h num       .. set Hamming distance for training sequence search (default 0) (0 to 2 recommended) (slow)\n");
 		exit(1);
 	}
 
@@ -148,7 +153,7 @@ int main(int argc, char **argv)
 			memset(buf, 0, BUFSIZE);
 			rlen = to_consume;
 		}
-		int rc = tetra_burst_sync_in(trs, buf, rlen);
+		int rc = tetra_burst_sync_in(trs, buf, rlen, hdist);
 		if (len == 0 && rc <= 0) {
 			printf("EOF");
 			break;

@@ -8,6 +8,7 @@ if [ $# -lt 1 ]; then
 	echo "Extra options:"
 	echo "	-n <experiment name> (default: git head id) (no spaces and \"-\" pls)"
 	echo "	-o overwrite previous measurement"
+	echo "	-t parameters for tetra-rx"
 	echo ""
 	echo "Examples:"
 	echo "$0 path/to/file.bits"
@@ -20,13 +21,17 @@ mkdir -p "$TESTS_DIR"
 
 n=`git rev-parse HEAD`
 o=0
-while getopts ":n:o" opt; do
+t=" "
+while getopts ":n:ot:" opt; do
 	case $opt in
 	n)
 		n="$OPTARG"
 		;;
 	o)
 		o=1
+		;;
+	t)
+		t="$OPTARG"
 		;;
 	\?)
 		echo "Unknown option $OPTARG" >&2
@@ -44,7 +49,7 @@ shift $(( $OPTIND - 1 ))
 tmpdir=`mktemp -d /tmp/tetraXXX`
 
 for f in $@; do
-	corrects=`"time" -o "$tmpdir/time" ./tetra-rx -n "$f" 2>/dev/null | grep -E "^CRC COMP: 0x.+ OK" | wc -l`
+	corrects=`"time" -o "$tmpdir/time" ./tetra-rx -n "$f" $t 2>/dev/null | grep -E "^CRC COMP: 0x.+ OK" | wc -l`
 	tt=`grep user "$tmpdir/time" | head -n 1 | cut -d u -f 1`
 	echo "$f: $corrects frames, $tt s"
 	hash=`sha256sum "$f" | cut -c 1-20`

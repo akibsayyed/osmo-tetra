@@ -65,7 +65,7 @@ static unsigned int conserve_bits(struct tetra_rx_state *trs, unsigned int howma
  *  we can safely consume the next time
  * if the result is negative, we are done with processing
  */
-int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int len)
+int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int len, int hdist)
 {
 	int rc;
 	unsigned int train_seq_offs;
@@ -81,7 +81,7 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 		rc = tetra_find_train_seq(trs->bitbuf+214, trs->bits_in_buf,
 					  (1 << TETRA_TRAIN_NORM_1)|
 					  (1 << TETRA_TRAIN_NORM_2)|
-					  (1 << TETRA_TRAIN_SYNC), &train_seq_offs);
+					  (1 << TETRA_TRAIN_SYNC), &train_seq_offs, hdist);
 		train_seq_offs += 214;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
@@ -116,7 +116,7 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 		rc = tetra_find_train_seq(trs->bitbuf+122, trs->bits_in_buf,
 					(1 << TETRA_TRAIN_NORM_1)|
 					(1 << TETRA_TRAIN_NORM_2)|
-					(1 << TETRA_TRAIN_EXT), &train_seq_offs);
+					(1 << TETRA_TRAIN_EXT), &train_seq_offs, hdist);
 		train_seq_offs += 122;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
@@ -141,7 +141,7 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 	} else if (trs->burst_cb_priv->channel_type == TETRA_TYPE_DIRECT) {
 		rc = tetra_find_train_seq(trs->bitbuf+214, trs->bits_in_buf,
 					(1 << TETRA_TRAIN_SYNC)|
-					(1 << TETRA_TRAIN_NORM_1), &train_seq_offs);
+					(1 << TETRA_TRAIN_NORM_1), &train_seq_offs, hdist);
 		train_seq_offs += 214;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {

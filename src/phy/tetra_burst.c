@@ -259,16 +259,26 @@ int build_norm_c_d_burst(uint8_t *buf, const uint8_t *bkn1, const uint8_t *bb, c
 	return cur - buf;
 }
 
+int hammingbitcmp(const void *s1, const void *s2, size_t n, int limit)
+{
+	const uint8_t *a = s1;
+	const uint8_t *b = s2;
+	int diff = 0;
+	for (int i = 0; i < n; i++) {
+		diff += a[i]^b[i];
+	}
+	return diff > limit;
+}
 
 int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
-			 uint32_t mask_of_train_seq, unsigned int *offset)
+			 uint32_t mask_of_train_seq, unsigned int *offset, int hdist)
 {
 
 	static uint32_t tsq_bytes[5];
 	if (tsq_bytes[0] == 0) {
 #define FILTER_LOOKAHEAD_LEN 22
 #define FILTER_LOOKAHEAD_MASK ((1<<FILTER_LOOKAHEAD_LEN)-1)
-		for(int i = 0; i<FILTER_LOOKAHEAD_LEN; i++) {
+		for (int i = 0; i<FILTER_LOOKAHEAD_LEN; i++) {
 			tsq_bytes[0] = (tsq_bytes[0] << 1) | y_bits[i];
 			tsq_bytes[1] = (tsq_bytes[1] << 1) | n_bits[i];
 			tsq_bytes[2] = (tsq_bytes[2] << 1) | p_bits[i];
@@ -285,51 +295,101 @@ int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
 
 	const uint8_t *cur;
 
-	for (cur = in; cur < in + end_of_in; cur++) {
+	if (hdist == 0) {
+		for (cur = in; cur < in + end_of_in; cur++) {
 
-		filter = ((filter << 1) | cur[FILTER_LOOKAHEAD_LEN-1]) & FILTER_LOOKAHEAD_MASK;
+			filter = ((filter << 1) | cur[FILTER_LOOKAHEAD_LEN-1]) & FILTER_LOOKAHEAD_MASK;
 
-		bool match = 0;
-		for(int i = 0; i < 5; i++) {
-			if(filter == tsq_bytes[i]) {
-				match = 1;
+			bool match = 0;
+			for(int i = 0; i < 5; i++) {
+				if(filter == tsq_bytes[i]) {
+					match = 1;
+				}
+			}
+			if(!match) {
+				continue;
+			}
+
+			int remain_len = (in + end_of_in) - cur;
+
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_SYNC) &&
+			    remain_len >= sizeof(y_bits) &&
+			    !memcmp(cur, y_bits, sizeof(y_bits))) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_SYNC;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_1) &&
+			    remain_len >= sizeof(n_bits) &&
+			    !memcmp(cur, n_bits, sizeof(n_bits))) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_1;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_2) &&
+			    remain_len >= sizeof(p_bits) &&
+			    !memcmp(cur, p_bits, sizeof(p_bits))) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_2;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_3) &&
+			    remain_len >= sizeof(q_bits) &&
+			    !memcmp(cur, q_bits, sizeof(q_bits))) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_3;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_EXT) &&
+			    remain_len >= sizeof(x_bits) &&
+			    !memcmp(cur, x_bits, sizeof(x_bits))) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_EXT;
 			}
 		}
-		if(!match) {
-			continue;
-		}
+	} else {
+		for (cur = in; cur < in + end_of_in; cur++) {
 
-		int remain_len = (in + end_of_in) - cur;
+			filter = ((filter << 1) | cur[FILTER_LOOKAHEAD_LEN-1]) & FILTER_LOOKAHEAD_MASK;
 
-		if (mask_of_train_seq & (1 << TETRA_TRAIN_SYNC) &&
-		    remain_len >= sizeof(y_bits) &&
-		    !memcmp(cur, y_bits, sizeof(y_bits))) {
-			*offset = (cur - in);
-			return TETRA_TRAIN_SYNC;
-		}
-		if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_1) &&
-		    remain_len >= sizeof(n_bits) &&
-		    !memcmp(cur, n_bits, sizeof(n_bits))) {
-			*offset = (cur - in);
-			return TETRA_TRAIN_NORM_1;
-		}
-		if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_2) &&
-		    remain_len >= sizeof(p_bits) &&
-		    !memcmp(cur, p_bits, sizeof(p_bits))) {
-			*offset = (cur - in);
-			return TETRA_TRAIN_NORM_2;
-		}
-		if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_3) &&
-		    remain_len >= sizeof(q_bits) &&
-		    !memcmp(cur, q_bits, sizeof(q_bits))) {
-			*offset = (cur - in);
-			return TETRA_TRAIN_NORM_3;
-		}
-		if (mask_of_train_seq & (1 << TETRA_TRAIN_EXT) &&
-		    remain_len >= sizeof(x_bits) &&
-		    !memcmp(cur, x_bits, sizeof(x_bits))) {
-			*offset = (cur - in);
-			return TETRA_TRAIN_EXT;
+			bool match = false;
+			for(int i = 0; i < 5; i++) {
+				if(__builtin_popcount(filter ^ tsq_bytes[i]) <= hdist) {
+					match = true;
+				}
+			}
+			if(!match) {
+				continue;
+			}
+
+			int remain_len = (in + end_of_in) - cur;
+
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_SYNC) &&
+			    remain_len >= sizeof(y_bits) &&
+			    !hammingbitcmp(cur, y_bits, sizeof(y_bits), hdist)) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_SYNC;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_1) &&
+			    remain_len >= sizeof(n_bits) &&
+			    !hammingbitcmp(cur, n_bits, sizeof(n_bits), hdist)) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_1;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_2) &&
+			    remain_len >= sizeof(p_bits) &&
+			    !hammingbitcmp(cur, p_bits, sizeof(p_bits), hdist)) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_2;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_NORM_3) &&
+			    remain_len >= sizeof(q_bits) &&
+			    !hammingbitcmp(cur, q_bits, sizeof(q_bits), hdist)) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_NORM_3;
+			}
+			if (mask_of_train_seq & (1 << TETRA_TRAIN_EXT) &&
+			    remain_len >= sizeof(x_bits) &&
+			    !hammingbitcmp(cur, x_bits, sizeof(x_bits), hdist)) {
+				*offset = (cur - in);
+				return TETRA_TRAIN_EXT;
+			}
 		}
 	}
 	return -1;

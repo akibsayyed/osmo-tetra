@@ -49,6 +49,6 @@ enum tetra_train_seq {
 
 /* find a TETRA training sequence in the burst buffer indicated */
 int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
-			 uint32_t mask_of_train_seq, unsigned int *offset);
+			 uint32_t mask_of_train_seq, unsigned int *offset, int hdist);
 
 #endif /* TETRA_BURST_H */

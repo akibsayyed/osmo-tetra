@@ -23,6 +23,6 @@ struct tetra_rx_state {
 
 
 /* input a raw bitstream into the tetra burst synchronizaer */
-int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int len);
+int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int len, int hdist);
 
 #endif /* TETRA_BURST_SYNC_H */

@@ -78,17 +78,18 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 	trs->bits_in_buf += len;
 
 	if (trs->burst_cb_priv->channel_type == TETRA_TYPE_DOWNLINK) {
-		rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
+		rc = tetra_find_train_seq(trs->bitbuf+214, trs->bits_in_buf,
 					  (1 << TETRA_TRAIN_NORM_1)|
 					  (1 << TETRA_TRAIN_NORM_2)|
 					  (1 << TETRA_TRAIN_SYNC), &train_seq_offs);
+		train_seq_offs += 214;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
-			return -conserve_bits(trs, TETRA_BITS_PER_TS);
+			return -conserve_bits(trs, 2*TETRA_BITS_PER_TS);
 		}
 
 		tetra_tdma_time_add_tn(&t_phy_state.time, 1);
-		printf("\nBURST @ %u", trs->bitbuf_start_bitnum);
+		printf("\nBURST @ %u", trs->bitbuf_start_bitnum+train_seq_offs);
 		DEBUGP(": %s", osmo_ubit_dump(trs->bitbuf, TETRA_BITS_PER_TS));
 		printf("\n");
 
@@ -112,13 +113,14 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 		return train_seq_offs+1;
 	} else if (trs->burst_cb_priv->channel_type == TETRA_TYPE_UPLINK) {
 
-		rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
+		rc = tetra_find_train_seq(trs->bitbuf+122, trs->bits_in_buf,
 					(1 << TETRA_TRAIN_NORM_1)|
 					(1 << TETRA_TRAIN_NORM_2)|
 					(1 << TETRA_TRAIN_EXT), &train_seq_offs);
+		train_seq_offs += 122;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
-			return -conserve_bits(trs, TETRA_BITS_PER_TS);
+			return -conserve_bits(trs, 2*TETRA_BITS_PER_TS);
 		}
 		switch (rc) {
 		case TETRA_TRAIN_EXT:
@@ -137,12 +139,13 @@ int tetra_burst_sync_in(struct tetra_rx_state *trs, uint8_t *bits, unsigned int 
 		}
 		return train_seq_offs+1;
 	} else if (trs->burst_cb_priv->channel_type == TETRA_TYPE_DIRECT) {
-		rc = tetra_find_train_seq(trs->bitbuf, trs->bits_in_buf,
+		rc = tetra_find_train_seq(trs->bitbuf+214, trs->bits_in_buf,
 					(1 << TETRA_TRAIN_SYNC)|
 					(1 << TETRA_TRAIN_NORM_1), &train_seq_offs);
+		train_seq_offs += 214;
 
 		if ((rc < 0) || (train_seq_offs + TETRA_BITS_PER_TS > trs->bits_in_buf)) {
-			return -conserve_bits(trs, TETRA_BITS_PER_TS);
+			return -conserve_bits(trs, 2*TETRA_BITS_PER_TS);
 		}
 
 		switch (rc) {
